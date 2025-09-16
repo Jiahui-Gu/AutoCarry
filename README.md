@@ -13,6 +13,6 @@ This solution automates the migration of unfinished work items between sprints/i
 
 ## Run steps
 
-Send the following to the GitHub Copilot Agent:
+### Send the following to the GitHub Copilot Agent
 
-`Please read the prompt.txt in your workspace and follow the steps described there`
+`Please read the AutoCarryPrompt.txt in your workspace and follow the steps described there`

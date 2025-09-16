@@ -1,0 +1,98 @@
+Task: Move work items that meet criteria into the current sprint.
+
+Tool: Use ADO MCP (required) — perform all live queries, identity resolution, and updates via ADO MCP. Emphasis: All queries, identity resolution, and updates must be performed using ADO MCP.
+
+Parameters:
+
+# === Immutable settings (DO NOT MODIFY) ===
+# These fields are used for parsing, query templates, and output structure.
+# Changing them may cause the automation agent to fail.
+search_query_template: 'IterationPath:"{previous_iteration}" AND (WorkItemType:"User Story" OR WorkItemType:"Bug" OR WorkItemType:"Dev Task") AND ({users}) AND (State:{states})'
+fields_to_fetch: [System.Id,System.Title,System.WorkItemType,System.IterationPath,System.State,System.AssignedTo,System.Rev,System.CreatedDate,System.ChangedDate]
+identity_resolution: [email, uniqueName, displayName]  # Agent resolves identities in this order; not recommended to change
+output_formats: [json, table]  # Must include 'json' (machine output) and 'table' (human-readable)
+anchor_date: 2025-06-25
+cadence_days: 14
+iteration_name_format: Engineering\YYYY-MM-DD
+allowed_types: [User Story, Bug, Dev Task]
+include_states: [New, Ready, In Progress, Review, Triaged, Active]
+max_results: 200                        # Search limit; adjust as needed
+
+search_request_json_template: {
+  "searchText": "IterationPath:\\"{previous_iteration}\\" AND (WorkItemType:\\"User Story\\" OR WorkItemType:\\"Bug\\" OR WorkItemType:\\"Dev Task\\") AND ({assigned_clause}) AND ({state_clause})",
+  "top": {max_results}
+}
+
+# How to build clauses (agent MUST follow exactly):
+# - assigned_clause: join include_User_aliases with ' OR ' where each entry becomes 'AssignedTo:<alias>' (no quotes) unless alias contains spaces -> then use 'AssignedTo:"<alias>"'. Enclose the whole joined expression in parentheses.
+#   Example assigned_clause: (AssignedTo:yiswan OR AssignedTo:jiahuigu)
+# - state_clause: join include_states with ' OR ' where each entry becomes 'State:<state>' (no quotes) unless state contains spaces -> then use 'State:"<state>"'. Enclose the whole joined expression in parentheses.
+#   Example state_clause: (State:New OR State:Ready OR State:"In Progress")
+# - When substituting {previous_iteration}, escape backslashes for the literal search string by replacing '\\' with '\\\\' so an iteration path like Engineering\2025-08-20 becomes Engineering\\2025-08-20 in the literal.
+# - The final searchText must match this example exactly (including parentheses and quoting rules):
+#   IterationPath:"Engineering\\2025-08-20" AND (WorkItemType:"User Story" OR WorkItemType:"Bug" OR WorkItemType:"Dev Task") AND (AssignedTo:yiswan OR AssignedTo:jiahuigu) AND (State:New OR State:Ready OR State:"In Progress" OR State:Review OR State:Triaged OR State:Active)
+# - The agent must send the JSON object exactly as in search_request_json_template to mcp_azure-devops_search_workitem with project=ado_project when provided.
+
+# === User-configurable settings (SAFE TO MODIFY) ===
+# These values can be adjusted by the user: anchor date, cadence, iteration format, filters, and execution flag.
+include_user_aliases: [yiswan, jiahuigu, Shichao.Zhang]  # Aliases only; each value must be unique. Agent MUST NOT attempt to resolve these as email/displayName/uniqueName — treat them as literal aliases to match against AssignedTo.
+execute_changes: true                  # false = dry-run; true = perform updates (use with caution)
+
+Steps to perform (strict):
+
+1) Compute current sprint (deterministic):
+   - days = (today - anchor_date).days
+   - n = floor(days / cadence_days)
+   - sprint_start = anchor_date + n * cadence_days
+   - target_iteration = iteration_name_format with sprint_start substituted (example: Engineering\2025-09-03)
+   - sprint_end = sprint_start + (cadence_days - 1) days
+
+2) Compute previous_iteration (deterministic):
+   - previous_sprint_start = sprint_start - cadence_days days
+   - previous_iteration = iteration_name_format with previous_sprint_start substituted
+
+3) Build searchText using search_query_template:
+   - Follow the exact formatting rules in the "How to build clauses (agent MUST follow exactly)" section above when substituting {previous_iteration}, {users} and {states}. Ensure backslashes in {previous_iteration} are escaped (use "\\" in the literal string).
+   - Result should be a literal searchText like:
+     IterationPath:"Engineering\\2025-08-20" AND (WorkItemType:"User Story" OR WorkItemType:"Bug" OR WorkItemType:"Dev Task") AND (AssignedTo:yiswan OR AssignedTo:jiahuigu) AND (State:New OR State:Ready OR State:"In Progress" OR State:Review OR State:Triaged OR State:Active)
+
+4) Use ADO MCP to search live work items (required):
+   - Call mcp_azure-devops_search_workitem with parameters: { searchText, top = max_results, project = ado_project (if provided) }
+   - If the search returns zero results: return the JSON summary with matched_count=0 and an empty items array and stop (message: "no matching items").
+
+5) Always read full work item fields before any updates:
+   - Call mcp_azure-devops_wit_get_work_items_batch_by_ids with the list of matched ids and fields=fields_to_fetch (project = ado_project if provided).
+
+6) Dry-run vs execute:
+   - If execute_changes = false: do NOT call any update API. Produce outputs only (see "Output" section). For each item include per-item result indicating attempted_change=false and message="dry-run: no update performed".
+   - If execute_changes = true: call mcp_azure-devops_wit_update_work_items_batch (or the equivalent batch update MCP) to set System.IterationPath = target_iteration for each matched item. For each update return id, attempted_change=true, success boolean, new_revision number on success or error_message on failure. Attach update_comment_template as a comment if supported.
+   - Do NOT modify any items outside the filtered result set.
+
+Output (machine + human):
+
+- Machine-readable top-level JSON summary MUST include:
+  {
+    "sprint_start": "YYYY-MM-DD",
+    "sprint_end": "YYYY-MM-DD",
+    "target_iteration": "Engineering\\YYYY-MM-DD",
+    "previous_iteration": "Engineering\\YYYY-MM-DD",
+    "matched_count": <int>,
+    "counts": { "attempted": <int>, "succeeded": <int>, "failed": <int> }
+  }
+
+- Machine-readable items array (JSON): array of objects with keys:
+  id, title, type, current_iteration, state, assigned_to, target_iteration, url, current_revision
+
+- Per-item results (only for updates or to indicate dry-run):
+  For each item return { id, attempted_change (bool), success (bool|null), new_revision (int|null), error_message (string|null), message }
+
+- Human-readable compact tables grouped by AssignedTo: For each distinct `AssignedTo` value produce a separate compact table. Each table must be labeled with the AssignedTo (e.g., `AssignedTo: Shichao Zhang`) and include the header: ID | Title | Type | AssignedTo | State | Link. Tables should be separated by a blank line and the same grouping must also be represented in the machine-readable JSON output (i.e., a JSON object keyed by assigned user with an array of item rows).
+
+Return final summary exactly as described above.
+
+- (Merged requirements) Machine-readable output must include the table in JSON and also compact human-readable tables grouped by AssignedTo. For updates performed include per-item result objects (ID, attempted_change, success boolean, new revision number or error message). Always include the top-level JSON summary with computed sprint_start, sprint_end, target_iteration and counts (attempted/succeeded/failed).
+
+Notes:
+Do not modify items outside the filter.
+Do not ask any follow-up questions or request additional confirmation — proceed strictly according to the execute_changes parameter and the authenticated caller context.
+Return machine-readable table and per-item results for automation.
