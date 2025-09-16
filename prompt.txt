@@ -1,0 +1,65 @@
+Task: Move work items that meet criteria into the current sprint.
+
+Tool: Use ADO MCP (required) — perform all live queries, identity resolution, and updates via ADO MCP. Emphasis: All queries, identity resolution, and updates must be performed using ADO MCP.
+
+Parameters:
+
+project: Engineering
+anchor_date: 2025-06-25
+cadence_days: 14
+iteration_name_format: Engineering\YYYY-MM-DD
+allowed_types: User Story, Bug, Dev Task
+excluded_states: Closed, Removed
+execute_changes: false
+
+Steps to perform (strict):
+
+Compute the current sprint using anchor_date and cadence_days:
+
+days = (today - anchor_date).days
+n = floor(days / cadence_days)
+sprint_start = anchor_date + n * cadence_days
+target_iteration = formatted as iteration_name_format (sprint_start)
+sprint_end = sprint_start + (cadence_days - 1) days
+
+
+Compute previous_iteration:
+previous_sprint_start = sprint_start - cadence_days days
+previous_iteration = formatted as iteration_name_format (previous_sprint_start) — i.e., the iteration immediately preceding the computed current sprint.
+
+Using `search_workitem` query project for items IterationPath == previous_iteration, returning: ID, Title, WorkItemType, State, IterationPath, Link. Use ADO MCP for this live query.
+
+# Saved-query resolution and fallback (strict — added to avoid earlier mistake):
+- When the instructions say to use a saved query named `search_workitem`, first attempt to execute that saved query via ADO MCP query execution APIs.
+- If the saved query cannot be retrieved or execution returns null / not found / or otherwise fails (for example because the saved query requires parameters that are not available), do NOT assume the saved query exists or will succeed.
+- In that failure case, immediately fall back to the ADO MCP search API (the work item search endpoint) and run a search with an explicit `searchText` that includes the iteration path and assignment. Example searchText to use:
+  `IterationPath:{previous_iteration} system.assignedto:{authenticated_user_uniqueName_or_email}`
+  Ensure the `project` parameter is provided to the search API.
+- After obtaining candidate work item IDs from either the saved-query execution or the search API fallback, ALWAYS call the ADO MCP work-item GET API for each item to confirm live fields (`System.IterationPath`, `System.WorkItemType`, `System.State`, etc.) before applying any filtering or updates.
+- In the final machine-readable summary, include a field noting which method was used for discovery (`discovery_method`: `saved_query` or `search_api`) and any fallback reason if applicable.
+
+Filter items where:
+
+Type ∈ allowed_types
+AND State ∉ excluded_states
+
+Output a table: ID | Title | Type | Current Iteration | State | Target Iteration | Link. If none, respond “no matching items” and stop.
+
+If execute_changes = false: return the table only (dry-run).
+
+If execute_changes = true: update each listed item’s IterationPath to target_iteration using ADO MCP; for each update return result (success/failure, new revision or error). Do not modify any items outside these filtered results.
+
+Return final summary: computed current sprint, table, count attempted, count succeeded, count failed (with reasons).
+
+Machine-readable output requirements:
+
+- Provide the table in a machine-readable format (JSON array) and also a compact human-readable table.
+- For updates performed, include per-item result objects (ID, attempted change, success boolean, new revision number or error message).
+- Always include a top-level JSON summary with computed sprint_start, sprint_end, target_iteration, counts (attempted/succeeded/failed).
+
+Notes:
+
+Always read live work item data before filtering/updates using ADO MCP.
+Do not modify items outside the filter.
+Do not ask any follow-up questions or request additional confirmation — proceed strictly according to the execute_changes parameter and the authenticated caller context.
+Return machine-readable table and per-item results for automation.
