@@ -35,7 +35,7 @@ search_request_json_template: {
 
 # === User-configurable settings (SAFE TO MODIFY) ===
 # These values can be adjusted by the user: anchor date, cadence, iteration format, filters, and execution flag.
-include_user_aliases: [yiswan, jiahuigu, Shichao.Zhang]  # Aliases only; each value must be unique. Agent MUST NOT attempt to resolve these as email/displayName/uniqueName — treat them as literal aliases to match against AssignedTo.
+include_user_aliases: [yiswan, jiahuigu, shiczha, junjieshao, jesong, zhihongli, jipe, lianli, yih]  # Aliases only; each value must be unique. Agent MUST NOT attempt to resolve these as email/displayName/uniqueName — treat them as literal aliases to match against AssignedTo.
 execute_changes: true                  # false = dry-run; true = perform updates (use with caution)
 
 Steps to perform (strict):
@@ -86,7 +86,20 @@ Output (machine + human):
 - Per-item results (only for updates or to indicate dry-run):
   For each item return { id, attempted_change (bool), success (bool|null), new_revision (int|null), error_message (string|null), message }
 
-- Human-readable compact tables grouped by AssignedTo: For each distinct `AssignedTo` value produce a separate compact table. Each table must be labeled with the AssignedTo (e.g., `AssignedTo: Shichao Zhang`) and include the header: ID | Title | Type | AssignedTo | State | Link. Tables should be separated by a blank line and the same grouping must also be represented in the machine-readable JSON output (i.e., a JSON object keyed by assigned user with an array of item rows).
+- Human-readable compact tables grouped by AssignedTo (MUST be Markdown tables):
+  - For each distinct `AssignedTo` produce a labeled section: `AssignedTo: <Display Name>`.
+  - Immediately below the label render a Markdown table with a header row and a separator row, exactly using pipe separators. Required header and separator form:
+    | ID | Title | Type | AssignedTo | State | Link |
+    | -- | -- | -- | -- | -- | -- |
+  - Each work item is one row. If a field contains a pipe character (`|`), escape it or wrap the cell with backticks so Markdown rendering remains correct. Keep each row compact (single line per row). Separate different `AssignedTo` sections with a single blank line.
+  - In addition to including these Markdown tables for humans, include the same grouped tables in the machine-readable JSON output under two keys:
+    1) `grouped_by_assigned_to` — an object keyed by the assigned display name with arrays of item objects (ID, Title, Type, AssignedTo, State, Link).
+    2) `human_tables_markdown` — an object keyed by the assigned display name containing the Markdown table string for that assignee. Example JSON fragment:
+     {
+       "grouped_by_assigned_to": { "Shichao Zhang": [ { "ID": 1070676, "Title": "...", "Type": "Bug", "AssignedTo": "Shichao Zhang", "State": "Triaged", "Link": "https://..." } ] },
+       "human_tables_markdown": { "Shichao Zhang": "| ID | Title | Type | AssignedTo | State | Link |\n| -- | -- | -- | -- | -- | -- |\n| 1070676 | Example title | Bug | Shichao Zhang | Triaged | https://... |" }
+     }
+    This guarantees the agent's next run produces properly-rendered Markdown tables for humans while keeping machine-consumable groupings.
 
 Return final summary exactly as described above.
 
