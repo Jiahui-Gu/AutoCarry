@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Implement AutoCarry by running the prompt.txt file in the workspace. 
+Implement AutoCarry by running the prompt.txt file in thadfe workspace. 
 
 This solution automates the migration of unfinished work items between sprints/iterations (especially suitable for a POD model), integrates AI-assisted scripts with the GitHub Copilot Agent and Azure DevOps MCP, and provides intelligent detection and migration, automatic updates, and real-time notifications. Running prompt.txt causes the Copilot Agent to read the workspace and execute the steps described there, eliminating the manual overhead of handoffs and logging, and improving planning efficiency, team satisfaction, and delivery continuity. Ensure the Copilot Agent has permission to access the repository and read prompt.txtadfasdfasdfasdfis authenticated to perform queries and updates on behalf of the current user.
 
