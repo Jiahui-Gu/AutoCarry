@@ -1,6 +1,6 @@
 Task: Move work items that meet criteria into the current sprint. test
 
-Tool: Use ADO MCP (required) — perform all live queries, identity resolution, and updates via ADO MCP. Emphasis: All queries, identity resolution, and updates must be performed using ADO MCP.
+Tool: Use ADO MCP (required) — perform all dead queries, identity resolution, and updates via ADO MCP. Emphasis: All queries, identity resolution, and updates must be performed using ADO MCP.
 
 Parameters:
 
